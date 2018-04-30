@@ -49,7 +49,7 @@ public class FatherThread extends GradFatherThread {
     //使车位下降,这里添加的isPut字段,是为了使取车和放车可以公用该方法,isPut是用户放车时插入数据库的
     public void connectionDown(String position, boolean isPut) {
         try {
-            //TODO Test 新增功能: 取放车之前,先查询已经存放车的数量,发送到装置
+            //TODO Test 新增功能: 取放车之前,先查询已经存放车的数量,发送到装置,记住添加到最后版本中
             if (connection == null || connection.isClosed()) {
                 createNewConnection();
             }
@@ -59,10 +59,6 @@ public class FatherThread extends GradFatherThread {
             while (resultSet.next()) {
                 totalCount++;
             }
-            Log.d("@HusterYP", String.valueOf("当前存放数量: " + totalCount));
-            //TODO 先发送数量到设备,然后再让设备下降,格式...
-
-
             //登录设备
             //这里将设备Socket抽取出来,只是用一个,这是为了防止同一用户(一次过程中)多次登录
             if (socket == null || socket.isClosed()) {
@@ -91,11 +87,12 @@ public class FatherThread extends GradFatherThread {
                 if (object.get("M").equals("isOL")) {
                     String res = ((JSONObject) (object.get("R"))).getString(DEVICE_ID);
                     if (res.equals("1")) {
-                        //设备在线,发送指令 `{"M":"say","C":"DOWN","SIGN":"车位号"}`,车位下降
+                        // 设备在线,先发送总数量到装置
+                        //TODO 新增功能,先发送数量到装置; Test: 是否可以紧接着发送车位下降信息??
                         JSONObject down = new JSONObject();
                         down.put("M", "say");
-                        down.put("C", "DOWN");
-                        down.put("SIGN", position);
+                        down.put("C", "BIKENUM");
+                        down.put("SIGN", totalCount);
                         writer.write(down.toString() + "\n");
                         writer.flush();
                     } else {
@@ -106,6 +103,16 @@ public class FatherThread extends GradFatherThread {
                 }
                 //如果上面发送了车位下降的信息,这里接收到车位下降完成的信息
                 if (object.get("M").equals("say")) {
+                    //设备在线后,先发送总数量到装置,然后根据返回信息(C=3)发送让装置下降的信息
+                    if (object.get("C").equals("3")) {
+                        // 设备在线,发送指令 `{"M":"say","C":"DOWN","SIGN":"车位号"}`,车位下降
+                        JSONObject down = new JSONObject();
+                        down.put("M", "say");
+                        down.put("C", "DOWN");
+                        down.put("SIGN", position);
+                        writer.write(down.toString() + "\n");
+                        writer.flush();
+                    }
                     if (object.get("C").equals("1")) {
                         if (isPut) {
                             handler.sendEmptyMessage(handler.DOWN_PUT_COMPLETE);
